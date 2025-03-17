@@ -1,23 +1,17 @@
-#include <signal.h>
+#include <locale.h>
+#include <ncurses.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
-#include <termios.h>
 #include <time.h>
 #include <unistd.h>
-
-const char* double_full_block = "\u2588\u2588";
 
 typedef struct SandGrid {
     unsigned int width;
     unsigned int height;
-    char *string;
     bool *data;
 } SandGrid;
-
-void sand_grid_string_update(SandGrid *sand_grid);
 
 SandGrid *sand_grid_create(unsigned int width, unsigned int height, bool default_value) {
     if (width == 0 || height == 0) return NULL;
@@ -28,12 +22,6 @@ SandGrid *sand_grid_create(unsigned int width, unsigned int height, bool default
     sand_grid->width = width;
     sand_grid->height = height;
 
-    sand_grid->string = malloc((width * strlen(double_full_block) * height + height) * sizeof(char));
-    if (sand_grid->string == NULL) {
-        free(sand_grid);
-        return NULL;
-    }
-    
     sand_grid->data = malloc(width * height * sizeof(bool));
     if (sand_grid->data == NULL) {
         free(sand_grid);
@@ -44,49 +32,15 @@ SandGrid *sand_grid_create(unsigned int width, unsigned int height, bool default
         sand_grid->data[i] = default_value;
     }
 
-    sand_grid_string_update(sand_grid);
-
     return sand_grid;
 }
 
 void sand_grid_destroy(SandGrid *sand_grid) {
     free(sand_grid->data);
-    free(sand_grid->string);
     free(sand_grid);
 }
 
-void sand_grid_cell_set(SandGrid *sand_grid, unsigned int x, unsigned int y, bool value) {
-    sand_grid->data[y * sand_grid->width + x] = value;
-}
-
-bool sand_grid_cell_get(SandGrid *sand_grid, unsigned int x, unsigned int y) {
-    return sand_grid->data[y * sand_grid->width + x];
-}
-
-void sand_grid_string_update(SandGrid *sand_grid) {
-    unsigned int i = 0;
-    for (unsigned int y = 0; y < sand_grid->height; y++) {
-        for (unsigned int x = 0; x < sand_grid->width; x++) {
-            if (sand_grid_cell_get(sand_grid, x, y)) {
-                memcpy(&sand_grid->string[i], double_full_block, strlen(double_full_block));
-                i += strlen(double_full_block);
-            } else {
-                memcpy(&sand_grid->string[i], "  ", 2 * sizeof(char));
-                i += 2;
-            }
-
-            if (x == sand_grid->width - 1) {
-                if (y == sand_grid->height - 1) {
-                    sand_grid->string[i++] = '\0';
-                } else {
-                    sand_grid->string[i++] = '\n';
-                }
-            }
-        }
-    }
-}
-
-bool sand_grid_data_update(SandGrid *sand_grid) {
+bool sand_grid_update(SandGrid *sand_grid) {
     bool *data = malloc(sand_grid->width * sand_grid->height * sizeof(bool));
     if (data == NULL) return false;
 
@@ -95,7 +49,7 @@ bool sand_grid_data_update(SandGrid *sand_grid) {
     bool updated = false;
     for (unsigned int y = 0; y < sand_grid->height; y++) {
         for (unsigned int x = 0; x < sand_grid->width; x++) {
-            if (!sand_grid_cell_get(sand_grid, x, y) || y == sand_grid->height - 1) continue;
+            if (y == sand_grid->height - 1 || !sand_grid->data[y * sand_grid->width + x]) continue;
 
             if (!data[(y + 1) * sand_grid->width + x]) {
                 data[y * sand_grid->width + x] = false;
@@ -103,10 +57,10 @@ bool sand_grid_data_update(SandGrid *sand_grid) {
                 updated = true;
                 continue;
             }
-            
+
             if (x > 0 && !data[(y + 1) * sand_grid->width + x - 1]) {
                 data[y * sand_grid->width + x] = false;
-                data[(y + 1) * sand_grid->width + (x - 1)] = true;
+                data[(y + 1) * sand_grid->width + x - 1] = true;
                 updated = true;
                 continue;
             }
@@ -138,8 +92,9 @@ bool sand_grid_clear_falling(SandGrid *sand_grid) {
     bool updated = false;
     for (unsigned int y = 0; y < sand_grid->height - 1; y++) {
         for (unsigned int x = 0; x < sand_grid->width; x++) {
-            if (sand_grid_cell_get(sand_grid, x, y)) {
-                data[(y + 1) * sand_grid->width + x] = true;
+            bool value = sand_grid->data[y * sand_grid->width + x];
+            data[(y + 1) * sand_grid->width + x] = value;
+            if (value) {
                 updated = true;
             }
         }
@@ -147,63 +102,77 @@ bool sand_grid_clear_falling(SandGrid *sand_grid) {
 
     memcpy(sand_grid->data, data, sand_grid->width * sand_grid->height * sizeof(bool));
 
+    free(data);
+
     return updated;
 }
 
-void clear() {
-    const char *clear = "\033[2J\033[H";
-    write(STDOUT_FILENO, clear, strlen(clear));
-}
-
-bool should_exit = false;
-
-void handle_signals() {
-    should_exit = true;
+void sand_grid_display(SandGrid *sand_grid) {
+    for (unsigned int y = 0; y < sand_grid->height; y++) {
+        for (unsigned int x = 0; x < sand_grid->width; x++) {
+            char *string = (sand_grid->data[y * sand_grid->width + x]) ? "\u2588\u2588" : "  ";
+            mvaddstr(y, x * 2, string);
+        }
+    }
 }
 
 int main() {
-    signal(SIGINT, handle_signals);
-    signal(SIGTERM, handle_signals);
+    srand(time(NULL) ^ getpid());
 
-    struct winsize w;
-    if (ioctl(0, TIOCGWINSZ, &w) == -1) return 1;
+    setlocale(LC_ALL, "");
 
-    SandGrid *sand_grid = sand_grid_create(w.ws_col / 2, w.ws_row, false);
-    sand_grid->data[0] = true;
+    initscr();
+    noecho();
+    timeout(25);
+    curs_set(0);
 
-    unsigned int spawn_frames = w.ws_row;
+    int width;
+    int height;
+    getmaxyx(stdscr, height, width);
+    width /= 2;
+
+    SandGrid *sand_grid = sand_grid_create(width, height, false);
+
     bool clearing = false;
-    while (!should_exit) {
-        if (clearing) {
-            if (!sand_grid_clear_falling(sand_grid)) {
-                clearing = false;
-                spawn_frames = w.ws_row;
-            }
-        } else if (!sand_grid_data_update(sand_grid)) {
-            clearing = true;
+    unsigned int spawn_frames = height;
+    unsigned int wait_frames = 0;
+    while (true) {
+        char character = getch();
+        if (character != ERR && character == 'q') {
+            break;
         }
 
+        if (wait_frames > 0) {
+            wait_frames--;
+
+            continue;
+        }
+        
         if (spawn_frames > 0) {
-            for (unsigned int x = 0; x < sand_grid->width; x++) {
-                bool value = (rand() % 2 == 0) ? true : false;
-                sand_grid_cell_set(sand_grid, x, 0, value);
+            for (unsigned int x = 0; x < width; x++) {
+                sand_grid->data[x] = rand() % 4 == 0;
             }
 
             spawn_frames--;
         }
 
-        sand_grid_string_update(sand_grid);
+        sand_grid_display(sand_grid);
+        refresh();
 
-        clear();
-        write(STDOUT_FILENO, sand_grid->string, strlen(sand_grid->string));
-
-        struct timespec ts = { 0, 1000 / 30 * 1000000L };
-        nanosleep(&ts, NULL);
+        if (clearing) {
+            if (!sand_grid_clear_falling(sand_grid)) {
+                clearing = false;
+                spawn_frames = height;
+            }
+        } else if (!sand_grid_update(sand_grid)) {
+            clearing = true;
+            wait_frames = height / 4;
+        }
     }
 
-    sand_grid_destroy(sand_grid);
+    endwin();
 
-    clear();
+    sand_grid_destroy(sand_grid);
 
     return 0;
 }
