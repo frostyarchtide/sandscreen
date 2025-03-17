@@ -107,11 +107,14 @@ bool sand_grid_clear_falling(SandGrid *sand_grid) {
     return updated;
 }
 
-void sand_grid_display(SandGrid *sand_grid) {
+void sand_grid_display(SandGrid *sand_grid, bool extend_edge) {
     for (unsigned int y = 0; y < sand_grid->height; y++) {
         for (unsigned int x = 0; x < sand_grid->width; x++) {
-            char *string = (sand_grid->data[y * sand_grid->width + x]) ? "\u2588\u2588" : "  ";
-            mvaddstr(y, x * 2, string);
+            bool value = sand_grid->data[y * sand_grid->width + x];
+            mvaddstr(y, x * 2, (value) ? "\u2588\u2588" : "  ");
+            if (extend_edge) {
+                mvaddstr(y, x * 2 + 2, (value) ? "\u2588" : " ");
+            }
         }
     }
 }
@@ -129,6 +132,7 @@ int main() {
     int width;
     int height;
     getmaxyx(stdscr, height, width);
+    bool extend_edge = width % 2 == 1;
     width /= 2;
 
     SandGrid *sand_grid = sand_grid_create(width, height, false);
@@ -156,7 +160,7 @@ int main() {
             spawn_frames--;
         }
 
-        sand_grid_display(sand_grid);
+        sand_grid_display(sand_grid, extend_edge);
         refresh();
 
         if (clearing) {
