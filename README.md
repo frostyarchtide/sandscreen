@@ -10,13 +10,11 @@ Using **Sandscreen** is very simple at this time. Just run the binary and it wil
 
 # Building
 
-**Sandscreen** uses the CMake build system generator. A script to build the program as well as build then run the program are provided. An example for how to build manually is below:
+**Sandscreen** uses the CMake build system generator. A script to build the program is provided. An example for how to build manually is below:
 
 ```
-mkdir build
-cd build
-cmake ..
-make
+cmake -B build -S .
+cmake --build build
 ```
 
 # License
