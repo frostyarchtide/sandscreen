@@ -21,4 +21,4 @@ make
 
 # License
 
-This program is licensed under the MIT License. For further details, read the LICENSE.md file.
+This program is licensed under the MIT License. For further details, read the LICENSE file.
