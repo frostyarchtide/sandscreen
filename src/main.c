@@ -11,6 +11,7 @@ typedef struct SandGrid {
     unsigned int width;
     unsigned int height;
     bool *data;
+    bool *data_buffer;
 } SandGrid;
 
 SandGrid *sand_grid_create(unsigned int width, unsigned int height, bool default_value) {
@@ -28,6 +29,13 @@ SandGrid *sand_grid_create(unsigned int width, unsigned int height, bool default
         return NULL;
     }
 
+    sand_grid->data_buffer = malloc(width * height * sizeof(bool));
+    if (sand_grid->data_buffer == NULL) {
+        free(sand_grid->data);
+        free(sand_grid);
+        return NULL;
+    }
+
     for (unsigned int i = 0; i < width * height; i++) {
         sand_grid->data[i] = default_value;
     }
@@ -36,47 +44,43 @@ SandGrid *sand_grid_create(unsigned int width, unsigned int height, bool default
 }
 
 void sand_grid_destroy(SandGrid *sand_grid) {
+    free(sand_grid->data_buffer);
     free(sand_grid->data);
     free(sand_grid);
 }
 
 bool sand_grid_update(SandGrid *sand_grid) {
-    bool *data = malloc(sand_grid->width * sand_grid->height * sizeof(bool));
-    if (data == NULL) return false;
-
-    memcpy(data, sand_grid->data, sand_grid->width * sand_grid->height * sizeof(bool));
+    memcpy(sand_grid->data_buffer, sand_grid->data, sand_grid->width * sand_grid->height * sizeof(bool));
 
     bool updated = false;
     for (unsigned int y = 0; y < sand_grid->height; y++) {
         for (unsigned int x = 0; x < sand_grid->width; x++) {
             if (y == sand_grid->height - 1 || !sand_grid->data[y * sand_grid->width + x]) continue;
 
-            if (!data[(y + 1) * sand_grid->width + x]) {
-                data[y * sand_grid->width + x] = false;
-                data[(y + 1) * sand_grid->width + x] = true;
+            if (!sand_grid->data_buffer[(y + 1) * sand_grid->width + x]) {
+                sand_grid->data_buffer[y * sand_grid->width + x] = false;
+                sand_grid->data_buffer[(y + 1) * sand_grid->width + x] = true;
                 updated = true;
                 continue;
             }
 
-            if (x > 0 && !data[(y + 1) * sand_grid->width + x - 1]) {
-                data[y * sand_grid->width + x] = false;
-                data[(y + 1) * sand_grid->width + x - 1] = true;
+            if (x > 0 && !sand_grid->data_buffer[(y + 1) * sand_grid->width + x - 1]) {
+                sand_grid->data_buffer[y * sand_grid->width + x] = false;
+                sand_grid->data_buffer[(y + 1) * sand_grid->width + x - 1] = true;
                 updated = true;
                 continue;
             }
 
-            if (x < sand_grid->width - 1 && !data[(y + 1) * sand_grid->width + x + 1]) {
-                data[y * sand_grid->width + x] = false;
-                data[(y + 1) * sand_grid->width + x + 1] = true;
+            if (x < sand_grid->width - 1 && !sand_grid->data_buffer[(y + 1) * sand_grid->width + x + 1]) {
+                sand_grid->data_buffer[y * sand_grid->width + x] = false;
+                sand_grid->data_buffer[(y + 1) * sand_grid->width + x + 1] = true;
                 updated = true;
                 continue;
             }
         }
     }
 
-    memcpy(sand_grid->data, data, sand_grid->width * sand_grid->height * sizeof(bool));
-
-    free(data);
+    memcpy(sand_grid->data, sand_grid->data_buffer, sand_grid->width * sand_grid->height * sizeof(bool));
 
     return updated;
 }
